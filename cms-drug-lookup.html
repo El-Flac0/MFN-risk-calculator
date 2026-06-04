@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Medicare Drug Spending Lookup — Part B &amp; D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #ffffff; --surface2: #efede8;
+    --border: rgba(0,0,0,0.09); --border2: rgba(0,0,0,0.18);
+    --text: #1a1916; --muted: #6b6a65; --faint: #9e9d98;
+    --blue: #1a5fa8; --blue-lt: #ddeaf7;
+    --green: #0d6e52; --green-lt: #d4ede6;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; padding-bottom: 4rem; }
+
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1.25rem 2rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .logo { width: 40px; height: 40px; background: var(--blue); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo svg { width: 20px; height: 20px; fill: white; }
+  .hdr-text h1 { font-size: 1.2rem; font-weight: 600; letter-spacing: -0.02em; }
+  .hdr-text p { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+  .hdr-pills { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .hdr-pill { font-size: 0.71rem; padding: 3px 9px; border-radius: 999px; font-weight: 600; border: 1px solid; white-space: nowrap; }
+  .hdr-pill.b { background: var(--green-lt); color: var(--green); border-color: rgba(13,110,82,.2); }
+  .hdr-pill.d { background: var(--blue-lt); color: var(--blue); border-color: rgba(26,95,168,.2); }
+
+  main { max-width: 880px; margin: 1.75rem auto; padding: 0 1.25rem; }
+
+  .search-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem; margin-bottom: 1.5rem; }
+  .search-card label { display: block; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: .55rem; }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input { flex: 1; height: 40px; border: 1.5px solid var(--border2); border-radius: var(--radius-sm); padding: 0 13px; font-size: .92rem; color: var(--text); background: var(--bg); outline: none; transition: border-color .15s; font-family: inherit; }
+  .search-row input:focus { border-color: var(--blue); background: #fff; }
+  .search-row input::placeholder { color: var(--faint); }
+  .btn { height: 40px; padding: 0 20px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); font-size: .87rem; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; transition: background .15s; }
+  .btn:hover { background: #154d8a; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .hint { font-size: .74rem; color: var(--faint); margin-top: .55rem; line-height: 1.55; }
+
+  .source-row { display: flex; gap: 8px; margin-top: .85rem; flex-wrap: wrap; align-items: center; }
+  .source-row span { font-size: .76rem; color: var(--muted); margin-right: 2px; }
+  .toggle-btn { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; border: 1.5px solid var(--border2); background: var(--surface); cursor: pointer; font-size: .78rem; font-weight: 600; font-family: inherit; color: var(--muted); transition: all .15s; }
+  .toggle-btn.active-b { background: var(--green-lt); color: var(--green); border-color: var(--green); }
+  .toggle-btn.active-d { background: var(--blue-lt); color: var(--blue); border-color: var(--blue); }
+  .toggle-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .7; }
+
+  .prog-wrap { height: 3px; background: var(--border); border-radius: 2px; margin-top: 12px; overflow: hidden; display: none; }
+  .prog-bar { height: 3px; border-radius: 2px; transition: width .25s; width: 0%; }
+  .prog-bar.b { background: var(--green); }
+  .prog-bar.d { background: var(--blue); }
+  .status-msg { font-size: .78rem; color: var(--muted); margin-top: 7px; min-height: 16px; display: flex; align-items: center; gap: 6px; }
+  .spinner { width: 11px; height: 11px; flex-shrink: 0; border: 2px solid var(--border2); border-radius: 50%; animation: spin .7s linear infinite; }
+  .spinner.b { border-top-color: var(--green); }
+  .spinner.d { border-top-color: var(--blue); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .results-meta { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .9rem; flex-wrap: wrap; gap: 8px; }
+  .results-meta h2 { font-size: 1rem; font-weight: 600; }
+  .results-meta h2 em.q { font-style: normal; color: var(--blue); }
+  .count-badge { font-size: .73rem; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+
+  .section-header { display: flex; align-items: center; gap: 8px; margin: 1.25rem 0 .7rem; }
+  .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; }
+  .section-label.b { background: var(--green-lt); color: var(--green); }
+  .section-label.d { background: var(--blue-lt); color: var(--blue); }
+  .section-line { flex: 1; height: 1px; background: var(--border); }
+  .section-count { font-size: .73rem; color: var(--faint); }
+
+  /* Alert badges */
+  .alert-badges { display: flex; gap: 7px; margin-bottom: 10px; flex-wrap: wrap; }
+  .alert-badge { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 700; letter-spacing: .06em; padding: 4px 11px; border-radius: 5px; border: 1.5px solid; cursor: default; }
+  .alert-badge.globe { background: #e8f0fb; color: #1a3fa8; border-color: #1a3fa8; }
+  .alert-badge.guard { background: #fdecea; color: #a81a1a; border-color: #a81a1a; }
+
+  .drug-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.15rem 1.3rem; margin-bottom: .85rem; }
+  .drug-card:hover { border-color: var(--border2); }
+  .card-globe { border-color: #1a3fa8 !important; border-width: 1.5px !important; }
+  .card-guard { border-color: #a81a1a !important; border-width: 1.5px !important; }
+  .drug-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 10px; }
+  .drug-names h3 { font-size: .97rem; font-weight: 600; }
+  .source-tag { font-size: .68rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; margin-top: 1px; }
+  .source-tag.b { background: var(--green-lt); color: var(--green); }
+  .source-tag.d { background: var(--blue-lt); color: var(--blue); }
+
+  /* Brand name chips */
+  .brand-variants { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .brand-chip { font-size: .7rem; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
+
+  /* Year grid: 8 cols (5 actual + 3 projected) */
+  .years-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; margin-bottom: 12px; }
+  .year-cell { background: var(--surface2); border-radius: var(--radius-sm); padding: 8px 5px; text-align: center; border: 1px solid transparent; }
+  .year-cell.has-data { border-color: var(--border); }
+  .year-lbl { font-size: 9px; color: var(--faint); font-weight: 700; letter-spacing: .04em; margin-bottom: 3px; }
+  .year-val { font-size: .82rem; font-weight: 600; color: var(--text); }
+  .year-val.na { font-size: .72rem; color: var(--faint); font-weight: 400; }
+
+  /* Projection cells */
+  .proj-cell { border-style: dashed !important; border-color: #b06a00 !important; background: #fdf3e3 !important; }
+  .proj-val { color: #7a4500 !important; font-style: italic; }
+  .proj-note { font-size: .68rem; color: #9a6000; margin-top: 7px; }
+
+  .chart-area { position: relative; width: 100%; height: 150px; }
+
+  .empty-state { text-align: center; padding: 3.5rem 1rem; color: var(--muted); font-size: .88rem; line-height: 1.7; }
+  .empty-icon { font-size: 2.2rem; margin-bottom: .65rem; opacity: .35; }
+
+  .pag-wrap { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 1.25rem; }
+  .btn-sm { height: 30px; padding: 0 13px; font-size: .78rem; background: var(--surface); color: var(--text); border: 1px solid var(--border2); border-radius: var(--radius-sm); cursor: pointer; font-family: inherit; }
+  .btn-sm:disabled { opacity: .4; cursor: default; }
+  .pag-wrap span { font-size: .8rem; color: var(--muted); }
+
+  .foot-note { font-size: .72rem; color: var(--faint); margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); line-height: 1.6; }
+  .foot-note a { color: var(--faint); }
+
+  @media (max-width: 520px) {
+    header { padding: 1rem; }
+    main { padding: 0 .75rem; }
+    .years-grid { gap: 3px; }
+    .year-cell { padding: 6px 3px; }
+    .year-val { font-size: .7rem; }
+    .year-lbl { font-size: 8px; }
+    .drug-card { padding: .9rem 1rem; }
+    .hdr-pills { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M9 2a5 5 0 0 0-3.536 8.536L14.464 19.536A5 5 0 1 0 21 13l-9-9A4.98 4.98 0 0 0 9 2zm0 2a3 3 0 0 1 2.121.879L13 6.757 6.757 13 4.88 11.121A3 3 0 0 1 9 4zm7 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></svg>
+  </div>
+  <div class="hdr-text">
+    <h1>Medicare Drug Spending Lookup</h1>
+    <p>CMS National Drug Spending Data &middot; 2019&ndash;2023 actuals + 2024&ndash;2026 projections</p>
+  </div>
+  <div class="hdr-pills">
+    <span class="hdr-pill b">Part B &mdash; Physician-administered</span>
+    <span class="hdr-pill d">Part D &mdash; Retail pharmacy</span>
+  </div>
+</header>
+
+<main>
+  <div class="search-card">
+    <label for="searchInput">Search by brand or generic drug name</label>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="e.g. adalimumab, Humira, Keytruda, atorvastatin&hellip;" autocomplete="off" />
+      <button class="btn" id="searchBtn" onclick="doSearch()">Search</button>
+    </div>
+    <div class="source-row">
+      <span>Sources:</span>
+      <button class="toggle-btn active-b" id="togB" onclick="toggleSource('B')"><span class="toggle-dot"></span> Part B</button>
+      <button class="toggle-btn active-d" id="togD" onclick="toggleSource('D')"><span class="toggle-dot"></span> Part D</button>
+    </div>
+    <p class="hint">Results are grouped and summed by generic name, separately for Part B and Part D. First search loads each dataset once (~5&ndash;15 s), then stays cached.</p>
+    <div class="prog-wrap" id="pbWrapB"><div class="prog-bar b" id="pbB"></div></div>
+    <div class="prog-wrap" id="pbWrapD"><div class="prog-bar d" id="pbD"></div></div>
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+  <div id="resultArea"></div>
+  <p class="foot-note">
+    <strong>Part B</strong> covers drugs administered in physician/outpatient settings. <strong>Part D</strong> covers retail/mail-order prescriptions (Overall aggregate row only).<br>
+    Spending values are summed across all brand variants sharing the same generic name, within each part separately.<br>
+    &#x25B3; Projected values use ordinary least-squares linear regression on 2019&ndash;2023 actuals, floored at $0.
+    &#127760; <strong>GLOBE</strong> = Part B projected 2026 spending &ge; $100M. &#128737; <strong>GUARD</strong> = Part D projected 2026 spending &ge; $69M.
+    Source: <a href="https://data.cms.gov" target="_blank" rel="noopener">data.cms.gov</a>.
+  </p>
+</main>
+
+<script>
+const APIS = {
+  B: 'https://data.cms.gov/data-api/v1/dataset/76a714ad-3a2c-43ac-b76d-9dadf8f7d890/data',
+  D: 'https://data.cms.gov/data-api/v1/dataset/7e0b4365-fd63-4a29-8f5e-e0ac9f66a81b/data'
+};
+const BATCH = 2000;
+const YEARS = [2019, 2020, 2021, 2022, 2023];
+const PROJ_YEARS = [2024, 2025, 2026];
+const PAGE_SIZE = 6;
+const COLORS_B = ['#0d6e52','#1a8a66','#0a5040','#2aab82','#065c42'];
+const COLORS_D = ['#1a5fa8','#2475c7','#154d8a','#3d8bd4','#0e3d72'];
+
+let caches = { B: null, D: null };
+let srcEnabled = { B: true, D: true };
+let allResults = [];
+let currentPage = 1;
+let activeCharts = [];
+let isLoading = false;
+let lastTerm = '';
+
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+function toggleSource(src) {
+  srcEnabled[src] = !srcEnabled[src];
+  const btn = document.getElementById('tog' + src);
+  btn.classList.remove('active-b', 'active-d');
+  if (srcEnabled[src]) btn.classList.add(src === 'B' ? 'active-b' : 'active-d');
+  if (lastTerm) filterAndRender(lastTerm);
+}
+
+function setStatus(html, spinClass) {
+  document.getElementById('statusMsg').innerHTML = spinClass
+    ? '<div class="spinner ' + spinClass + '"></div><span>' + html + '</span>'
+    : '<span>' + html + '</span>';
+}
+function clearStatus() { document.getElementById('statusMsg').innerHTML = ''; }
+function setPb(src, pct) {
+  const wrap = document.getElementById('pbWrap' + src);
+  const bar  = document.getElementById('pb' + src);
+  wrap.style.display = 'block';
+  bar.style.width = pct + '%';
+  if (pct >= 100) setTimeout(() => { wrap.style.display = 'none'; bar.style.width = '0%'; }, 500);
+}
+
+async function fetchDataset(src) {
+  if (caches[src]) return caches[src];
+  const url = APIS[src];
+  let all = [], offset = 0;
+  while (true) {
+    const res = await fetch(url + '?size=' + BATCH + '&offset=' + offset);
+    if (!res.ok) throw new Error('Part ' + src + ' HTTP ' + res.status);
+    const batch = await res.json();
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all = all.concat(batch);
+    const total = parseInt(res.headers.get('X-Total-Count') || res.headers.get('x-total-count') || '0');
+    const pct = total > 0 ? Math.min(95, Math.round(all.length / total * 100)) : Math.min(80, offset / 200);
+    setPb(src, pct);
+    setStatus('Loading Part ' + src + '&hellip; ' + all.length.toLocaleString() + ' records', src.toLowerCase());
+    if (batch.length < BATCH) break;
+    offset += BATCH;
+  }
+  setPb(src, 100);
+  caches[src] = all;
+  return all;
+}
+
+async function doSearch() {
+  if (isLoading) return;
+  const term = document.getElementById('searchInput').value.trim();
+  if (!term) return;
+  if (!srcEnabled.B && !srcEnabled.D) { setStatus('Enable at least one source.'); return; }
+  isLoading = true;
+  lastTerm = term;
+  document.getElementById('searchBtn').disabled = true;
+  document.getElementById('resultArea').innerHTML = '';
+  destroyCharts();
+
+  try {
+    const srcsNeeded = ['B','D'].filter(s => srcEnabled[s]);
+    await Promise.all(srcsNeeded.map(src => fetchDataset(src)));
+    filterAndRender(term);
+  } catch(err) {
+    setStatus('Error loading data. Check your connection and try again.');
+    console.error(err);
+  }
+  isLoading = false;
+  document.getElementById('searchBtn').disabled = false;
+}
+
+function filterAndRender(term) {
+  const q = term.toLowerCase();
+  allResults = [];
+
+  const srcs = ['B','D'].filter(s => srcEnabled[s]);
+  for (const src of srcs) {
+    const dataset = caches[src];
+    if (!dataset) continue;
+
+    const matches = dataset.filter(r => {
+      const nameMatch =
+        (r.Brnd_Name && r.Brnd_Name.toLowerCase().includes(q)) ||
+        (r.Gnrc_Name && r.Gnrc_Name.toLowerCase().includes(q));
+      // Part D: only Overall rows; Part B: all rows
+      const overallOnly = src === 'D' ? r.Mftr_Name === 'Overall' : true;
+      return nameMatch && overallOnly;
+    });
+
+    // Group by Gnrc_Name (or Brnd_Name fallback), summing spend per year
+    const groups = {};
+    matches.forEach(r => {
+      const key = (r.Gnrc_Name || r.Brnd_Name || '').toLowerCase().trim();
+      if (!groups[key]) {
+        groups[key] = {
+          Gnrc_Name: r.Gnrc_Name || r.Brnd_Name || '—',
+          brandNames: new Set(),
+          spending: {}
+        };
+        YEARS.forEach(y => { groups[key].spending[y] = null; });
+      }
+      if (r.Brnd_Name) groups[key].brandNames.add(r.Brnd_Name.trim());
+      YEARS.forEach(y => {
+        const v = r['Tot_Spndng_' + y];
+        if (v !== '' && v != null) {
+          const n = parseFloat(v);
+          if (!isNaN(n)) groups[key].spending[y] = (groups[key].spending[y] || 0) + n;
+        }
+      });
+    });
+
+    Object.values(groups).forEach(g => allResults.push({ src, grouped: g }));
+  }
+
+  currentPage = 1;
+  clearStatus();
+  renderPage(term);
+}
+
+/* ── Linear regression extrapolation ── */
+function projectYears(vals, knownYears, targetYears) {
+  const points = [];
+  knownYears.forEach((y, i) => { if (vals[i] !== null) points.push({ x: y, y: vals[i] }); });
+  if (points.length < 2) {
+    const last = points.length === 1 ? points[0].y : null;
+    return targetYears.map(() => last);
+  }
+  const n = points.length;
+  const sumX  = points.reduce((s, p) => s + p.x, 0);
+  const sumY  = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  return targetYears.map(y => Math.max(0, slope * y + intercept));
+}
+
+function fmt(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(v);
+  if (isNaN(n)) return null;
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function destroyCharts() {
+  activeCharts.forEach(c => { try { c.destroy(); } catch(e){} });
+  activeCharts = [];
+}
+
+function renderPage(term) {
+  const total = allResults.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page = allResults.slice(start, start + PAGE_SIZE);
+  destroyCharts();
+
+  if (total === 0) {
+    document.getElementById('resultArea').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">&#128138;</div>'
+      + '<strong>No results for &ldquo;' + escHtml(term) + '&rdquo;</strong><br>'
+      + 'Try a partial name, check spelling, or ensure at least one source is enabled.</div>';
+    return;
+  }
+
+  const bItems = page.filter(r => r.src === 'B');
+  const dItems = page.filter(r => r.src === 'D');
+  const bTotal = allResults.filter(r => r.src === 'B').length;
+  const dTotal = allResults.filter(r => r.src === 'D').length;
+
+  let html = '<div class="results-meta"><h2>Results for <em class="q">&ldquo;' + escHtml(term) + '&rdquo;</em></h2>'
+    + '<span class="count-badge">' + total.toLocaleString() + ' drug' + (total !== 1 ? 's' : '') + '</span></div>';
+
+  if (bItems.length > 0) {
+    html += '<div class="section-header"><span class="section-label b">Part B</span>'
+      + '<div class="section-line"></div>'
+      + '<span class="section-count">' + bTotal + ' generic' + (bTotal !== 1 ? 's' : '') + '</span></div>';
+    bItems.forEach((item, idx) => { html += buildCard(item, start + page.indexOf(item)); });
+  }
+
+  if (dItems.length > 0) {
+    html += '<div class="section-header"><span class="section-label d">Part D</span>'
+      + '<div class="section-line"></div>'
+      + '<span class="section-count">' + dTotal + ' generic' + (dTotal !== 1 ? 's' : '') + '</span></div>';
+    dItems.forEach((item) => { html += buildCard(item, start + page.indexOf(item)); });
+  }
+
+  if (totalPages > 1) {
+    html += '<div class="pag-wrap">'
+      + '<button class="btn-sm" onclick="goPage(' + (currentPage-1) + ')" ' + (currentPage===1?'disabled':'') + '>&#8592; Prev</button>'
+      + '<span>Page ' + currentPage + ' of ' + totalPages + '</span>'
+      + '<button class="btn-sm" onclick="goPage(' + (currentPage+1) + ')" ' + (currentPage===totalPages?'disabled':'') + '>Next &#8594;</button>'
+      + '</div>';
+  }
+
+  document.getElementById('resultArea').innerHTML = html;
+
+  // Draw charts
+  page.forEach((item, idx) => {
+    const globalIdx = start + idx;
+    const g = item.grouped;
+    const vals = YEARS.map(y => g.spending[y] !== null ? g.spending[y] : null);
+    const proj = projectYears(vals, YEARS, PROJ_YEARS);
+    const allLabels = [...YEARS, ...PROJ_YEARS].map(String);
+    const canvas = document.getElementById('chart_' + globalIdx);
+    if (!canvas) return;
+    const palette = item.src === 'B' ? COLORS_B : COLORS_D;
+    const color = palette[idx % palette.length];
+    const barData = [...vals, ...PROJ_YEARS.map(() => null)];
+    const actualLine = [...vals, ...PROJ_YEARS.map(() => null)];
+    const lastActualIdx = vals.reduce((li, v, i) => v !== null ? i : li, -1);
+    const projLine = allLabels.map((_, i) => {
+      if (i < YEARS.length - 1) return null;
+      if (i === lastActualIdx) return vals[lastActualIdx];
+      if (i >= YEARS.length) return proj[i - YEARS.length];
+      return null;
+    });
+    const chart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: allLabels,
+        datasets: [
+          { label: 'Actual spending', data: barData, backgroundColor: color+'28', borderColor: color, borderWidth: 1.5, borderRadius: 4, order: 3 },
+          { label: 'Actual trend', data: actualLine, type: 'line', borderColor: color, borderWidth: 2, pointRadius: 3.5, pointBackgroundColor: color, pointBorderColor: '#fff', pointBorderWidth: 1.5, fill: false, tension: 0.35, order: 2, spanGaps: false },
+          { label: 'Projected', data: projLine, type: 'line', borderColor: color, borderWidth: 2, borderDash: [5,4], pointRadius: 4, pointStyle: 'triangle', pointBackgroundColor: color+'99', pointBorderColor: color, pointBorderWidth: 1.5, fill: false, tension: 0.2, order: 1, spanGaps: true }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.parsed.y !== null ? (ctx.dataset.label === 'Projected' ? '  Projected: ' : '  ') + fmt(ctx.parsed.y) : null } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: ctx => ctx.index >= YEARS.length ? '#b06a00' : '#888' } },
+          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 9 }, color: '#888', callback: v => fmt(v) } }
+        }
+      }
+    });
+    activeCharts.push(chart);
+  });
+}
+
+function buildCard(item, globalIdx) {
+  const g   = item.grouped;
+  const src = item.src;
+  const vals = YEARS.map(y => g.spending[y] !== null ? g.spending[y] : null);
+  const proj = projectYears(vals, YEARS, PROJ_YEARS);
+  const cid  = 'chart_' + globalIdx;
+
+  const proj2026 = proj[PROJ_YEARS.length - 1];
+  const showGlobe = src === 'B' && proj2026 !== null && proj2026 >= 100e6;
+  const showGuard = src === 'D' && proj2026 !== null && proj2026 >= 69e6;
+
+  let badgeHtml = '';
+  if (showGlobe || showGuard) {
+    badgeHtml = '<div class="alert-badges">'
+      + (showGlobe ? '<span class="alert-badge globe" title="Projected 2026 Part B spending &ge; $100M">&#127760; GLOBE</span>' : '')
+      + (showGuard ? '<span class="alert-badge guard" title="Projected 2026 Part D spending &ge; $69M">&#128737; GUARD</span>' : '')
+      + '</div>';
+  }
+
+  const brands = Array.from(g.brandNames).sort();
+  let brandsHtml = '';
+  if (brands.length) {
+    brandsHtml = '<div class="brand-variants">'
+      + brands.map(b => '<span class="brand-chip">' + escHtml(b) + '</span>').join('')
+      + '</div>';
+  }
+
+  let yearsHtml = YEARS.map((y, i) => {
+    const v = vals[i];
+    return '<div class="year-cell ' + (v !== null ? 'has-data' : '') + '">'
+      + '<div class="year-lbl">' + y + '</div>'
+      + '<div class="year-val ' + (v === null ? 'na' : '') + '">' + (v !== null ? fmt(v) : 'N/A') + '</div>'
+      + '</div>';
+  }).join('');
+
+  let projHtml = PROJ_YEARS.map((y, i) => {
+    const v = proj[i];
+    return '<div class="year-cell has-data proj-cell">'
+      + '<div class="year-lbl">' + y + ' &#x2197;</div>'
+      + '<div class="year-val proj-val">' + (v !== null ? fmt(v) : '&mdash;') + '</div>'
+      + '</div>';
+  }).join('');
+
+  const cardClass = 'drug-card' + (showGlobe ? ' card-globe' : '') + (showGuard ? ' card-guard' : '');
+
+  return '<div class="' + cardClass + '">'
+    + '<div class="drug-top">'
+    +   '<div class="drug-names">'
+    +     '<h3>' + escHtml(g.Gnrc_Name) + '</h3>'
+    +     brandsHtml
+    +   '</div>'
+    +   '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">'
+    +     '<span class="source-tag ' + src + '">Part ' + src + '</span>'
+    +   '</div>'
+    + '</div>'
+    + badgeHtml
+    + '<div class="years-grid">' + yearsHtml + projHtml + '</div>'
+    + '<div class="chart-area"><canvas id="' + cid + '" role="img" aria-label="Spending 2019-2026 for ' + escHtml(g.Gnrc_Name) + '"></canvas></div>'
+    + '<div class="proj-note">&#x25B3; Linear regression projection &middot; Summed across ' + brands.length + ' brand variant' + (brands.length !== 1 ? 's' : '') + '</div>'
+    + '</div>';
+}
+
+function goPage(n) {
+  currentPage = n;
+  renderPage(document.getElementById('searchInput').value.trim());
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
