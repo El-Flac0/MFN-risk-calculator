@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>International Drug List Prices</title>
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #ffffff; --surface2: #efede8;
+    --border: rgba(0,0,0,0.09); --border2: rgba(0,0,0,0.18);
+    --text: #1a1916; --muted: #6b6a65; --faint: #9e9d98;
+    --blue: #1a5fa8; --blue-lt: #ddeaf7;
+    --green: #0d6e52; --green-lt: #d4ede6;
+    --amber: #7a5000; --amber-lt: #fff8e1;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; padding-bottom: 4rem; }
+
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1.25rem 2rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .logo { width: 40px; height: 40px; background: var(--blue); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo svg { width: 20px; height: 20px; fill: white; }
+  .hdr-text h1 { font-size: 1.2rem; font-weight: 600; letter-spacing: -0.02em; }
+  .hdr-text p { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+  .nav-link { margin-left: auto; font-size: .8rem; color: var(--blue); text-decoration: none; border: 1px solid rgba(26,95,168,.3); border-radius: 999px; padding: 4px 12px; }
+  .nav-link:hover { background: var(--blue-lt); }
+
+  main { max-width: 900px; margin: 1.75rem auto; padding: 0 1.25rem; }
+
+  .search-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem; margin-bottom: 1.5rem; }
+  .search-card label { display: block; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: .55rem; }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input { flex: 1; height: 40px; border: 1.5px solid var(--border2); border-radius: var(--radius-sm); padding: 0 13px; font-size: .92rem; color: var(--text); background: var(--bg); outline: none; transition: border-color .15s; font-family: inherit; }
+  .search-row input:focus { border-color: var(--blue); background: #fff; }
+  .search-row input::placeholder { color: var(--faint); }
+  .btn { height: 40px; padding: 0 20px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); font-size: .87rem; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; transition: background .15s; }
+  .btn:hover { background: #154d8a; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .hint { font-size: .74rem; color: var(--faint); margin-top: .55rem; line-height: 1.55; }
+
+  /* Progress */
+  .overall-progress { margin-top: 1rem; display: none; }
+  .prog-label { font-size: .78rem; color: var(--muted); margin-bottom: 5px; display: flex; justify-content: space-between; }
+  .prog-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .prog-fill { height: 4px; background: var(--blue); border-radius: 2px; transition: width .3s; width: 0%; }
+
+  /* Results grid */
+  .results-header { display: flex; align-items: baseline; justify-content: space-between; margin: 1.25rem 0 .9rem; flex-wrap: wrap; gap: 8px; }
+  .results-header h2 { font-size: 1rem; font-weight: 600; }
+  .results-header h2 em { font-style: normal; color: var(--blue); }
+  .export-btn { font-size: .75rem; padding: 4px 12px; height: 28px; background: var(--surface2); color: var(--text); border: 1px solid var(--border2); border-radius: var(--radius-sm); cursor: pointer; font-family: inherit; }
+  .export-btn:hover { background: var(--border2); }
+
+  .country-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+
+  .country-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1rem 1.1rem;
+    display: flex; flex-direction: column; gap: 6px;
+    transition: border-color .15s;
+  }
+  .country-card:hover { border-color: var(--border2); }
+  .country-top { display: flex; align-items: center; gap: 8px; }
+  .flag { font-size: 1.3rem; line-height: 1; }
+  .country-name { font-size: .88rem; font-weight: 600; flex: 1; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.loading { background: #f0a500; animation: pulse .9s ease-in-out infinite; }
+  .status-dot.found { background: #0d6e52; }
+  .status-dot.notfound { background: #aaa; }
+  .status-dot.error { background: #c0392b; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .price-block { margin-top: 2px; }
+  .price-value { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+  .price-usd { font-size: .75rem; color: var(--muted); margin-top: 1px; }
+  .price-detail { font-size: .72rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .price-source { font-size: .67rem; color: var(--faint); margin-top: 4px; }
+  .price-source a { color: var(--faint); }
+  .not-found-msg { font-size: .78rem; color: var(--faint); font-style: italic; }
+
+  /* Disclaimer */
+  .disclaimer {
+    background: var(--amber-lt); border: 1px solid rgba(122,80,0,.2);
+    border-radius: var(--radius); padding: .9rem 1.1rem;
+    font-size: .76rem; color: var(--amber); line-height: 1.6;
+    margin-bottom: 1.25rem;
+  }
+  .disclaimer strong { color: var(--amber); }
+
+  .foot-note { font-size: .72rem; color: var(--faint); margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); line-height: 1.6; }
+  .foot-note a { color: var(--faint); }
+
+  @media (max-width: 520px) {
+    header { padding: 1rem; }
+    main { padding: 0 .75rem; }
+    .country-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+  </div>
+  <div class="hdr-text">
+    <h1>International Drug List Prices</h1>
+    <p>Published list prices across 19 OECD countries</p>
+  </div>
+  <a href="index.html" class="nav-link">&#8592; Medicare Spending</a>
+</header>
+
+<main>
+  <div class="disclaimer">
+    <strong>&#9888; Important:</strong> Prices are sourced from publicly available national formularies, reimbursement databases, and official pricing authorities via live web search. List prices may differ from net/negotiated prices actually paid. Always verify against official national sources before clinical or commercial use. Exchange rates are approximate and based on current mid-market rates.
+  </div>
+
+  <div class="search-card">
+    <label for="drugInput">Drug name (brand or generic)</label>
+    <div class="search-row">
+      <input type="text" id="drugInput" placeholder="e.g. adalimumab, Humira, apixaban, Eliquis&hellip;" autocomplete="off" />
+      <button class="btn" id="searchBtn" onclick="startSearch()">Search</button>
+    </div>
+    <p class="hint">Searches each country's official drug pricing source in parallel. Allow 30&ndash;60 seconds for all 19 countries to return results. Prices shown in local currency with USD equivalent.</p>
+    <div class="overall-progress" id="overallProgress">
+      <div class="prog-label"><span id="progText">Searching&hellip;</span><span id="progCount">0 / 19</span></div>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+  </div>
+
+  <div id="resultArea"></div>
+
+  <p class="foot-note">
+    Prices sourced via AI-assisted web search of official national formularies and drug pricing databases.
+    Sources include: PBS (Australia), APMGP (Austria), NIHDI (Belgium), CADTH (Canada), SÚKL (Czech Republic),
+    Medicinpriser (Denmark), HAS/CNRS (France), Lauer-Taxe (Germany), NCPE/HSE (Ireland), MOH (Israel),
+    AIFA (Italy), Yakka (Japan), ZorgInstituut (Netherlands), Legemiddelverket (Norway),
+    HIRA (South Korea), AEMPS (Spain), TLV (Sweden), BAG/OFSP (Switzerland), NHS BSA (UK).
+    USD conversions use approximate mid-market exchange rates.
+    Source: <a href="https://data.cms.gov" target="_blank" rel="noopener">data.cms.gov</a> for Medicare data.
+  </p>
+</main>
+
+<script>
+const COUNTRIES = [
+  { name: 'Australia',       flag: '🇦🇺', currency: 'AUD', source: 'PBS (Pharmaceutical Benefits Scheme)' },
+  { name: 'Austria',         flag: '🇦🇹', currency: 'EUR', source: 'APMGP / Erstattungskodex' },
+  { name: 'Belgium',         flag: '🇧🇪', currency: 'EUR', source: 'NIHDI / INAMI' },
+  { name: 'Canada',          flag: '🇨🇦', currency: 'CAD', source: 'CADTH / Drug Product Database' },
+  { name: 'Czech Republic',  flag: '🇨🇿', currency: 'CZK', source: 'SÚKL' },
+  { name: 'Denmark',         flag: '🇩🇰', currency: 'DKK', source: 'Medicinpriser.dk' },
+  { name: 'France',          flag: '🇫🇷', currency: 'EUR', source: 'HAS / Base de données publique' },
+  { name: 'Germany',         flag: '🇩🇪', currency: 'EUR', source: 'Lauer-Taxe / GKV-Spitzenverband' },
+  { name: 'Ireland',         flag: '🇮🇪', currency: 'EUR', source: 'HSE / NCPE Medicines' },
+  { name: 'Israel',          flag: '🇮🇱', currency: 'ILS', source: 'Ministry of Health IL' },
+  { name: 'Italy',           flag: '🇮🇹', currency: 'EUR', source: 'AIFA Farmaci' },
+  { name: 'Japan',           flag: '🇯🇵', currency: 'JPY', source: 'Yakka / MHLW NHI Price' },
+  { name: 'Netherlands',     flag: '🇳🇱', currency: 'EUR', source: 'ZorgInstituut / GIP databank' },
+  { name: 'Norway',          flag: '🇳🇴', currency: 'NOK', source: 'Legemiddelverket' },
+  { name: 'South Korea',     flag: '🇰🇷', currency: 'KRW', source: 'HIRA Drug Information' },
+  { name: 'Spain',           flag: '🇪🇸', currency: 'EUR', source: 'AEMPS CIMA' },
+  { name: 'Sweden',          flag: '🇸🇪', currency: 'SEK', source: 'TLV Läkemedel' },
+  { name: 'Switzerland',     flag: '🇨🇭', currency: 'CHF', source: 'BAG / OFSP Spezialitätenliste' },
+  { name: 'United Kingdom',  flag: '🇬🇧', currency: 'GBP', source: 'NHS BSA / Drug Tariff' }
+];
+
+// State per country
+let results = {};
+let completed = 0;
+let currentDrug = '';
+
+document.getElementById('drugInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') startSearch();
+});
+
+function startSearch() {
+  const drug = document.getElementById('drugInput').value.trim();
+  if (!drug) return;
+  currentDrug = drug;
+  results = {};
+  completed = 0;
+
+  document.getElementById('searchBtn').disabled = true;
+  document.getElementById('overallProgress').style.display = 'block';
+  updateProgress();
+  renderGrid(drug);
+
+  // Fire all country searches in parallel
+  COUNTRIES.forEach(country => searchCountry(drug, country));
+}
+
+function updateProgress() {
+  const pct = Math.round(completed / COUNTRIES.length * 100);
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progCount').textContent = completed + ' / ' + COUNTRIES.length;
+  document.getElementById('progText').textContent = completed < COUNTRIES.length
+    ? 'Searching ' + COUNTRIES.length + ' countries\u2026'
+    : 'Complete';
+  if (completed >= COUNTRIES.length) {
+    document.getElementById('searchBtn').disabled = false;
+  }
+}
+
+async function searchCountry(drug, country) {
+  const key = country.name;
+  results[key] = { status: 'loading' };
+  updateCard(country);
+
+  try {
+    const prompt = buildPrompt(drug, country);
+    // Call via Netlify Function — API key stays server-side
+    const response = await fetch('/.netlify/functions/claude-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error('API error ' + response.status + (errData.error ? ': ' + errData.error : ''));
+    }
+    const data = await response.json();
+
+    // Extract text response from content blocks
+    const textBlock = data.content.find(b => b.type === 'text');
+    const text = textBlock ? textBlock.text : '';
+
+    // Parse structured JSON from the response
+    const parsed = parseResponse(text);
+    results[key] = { status: parsed.found ? 'found' : 'notfound', ...parsed };
+  } catch(err) {
+    results[key] = { status: 'error', error: err.message };
+  }
+
+  completed++;
+  updateProgress();
+  updateCard(country);
+  refreshExportBtn();
+}
+
+function buildPrompt(drug, country) {
+  return `You are a pharmaceutical pricing researcher. Find the official published LIST PRICE (not reimbursed/net price) for the drug "${drug}" in ${country.name}.
+
+Search ${country.source} and other official national drug pricing sources for ${country.name}.
+
+Return ONLY a JSON object (no markdown, no explanation) in this exact format:
+{
+  "found": true,
+  "drug_name": "exact name as listed",
+  "formulation": "strength and form e.g. 40mg/0.8ml injection",
+  "pack_size": "e.g. 2 pre-filled syringes",
+  "list_price_local": 1234.56,
+  "currency": "${country.currency}",
+  "list_price_usd": 987.65,
+  "price_per_unit": "e.g. $123.45 per syringe",
+  "source": "exact source name",
+  "source_url": "https://...",
+  "notes": "any relevant notes e.g. multiple strengths available"
+}
+
+If the drug is not found or price not available in ${country.name}, return:
+{
+  "found": false,
+  "notes": "brief reason e.g. not registered, no public list price"
+}
+
+Important: Use web search to find the most current official list price. List price only — not reimbursed price.`;
+}
+
+function parseResponse(text) {
+  // Strip any markdown fences if present
+  const clean = text.replace(/```json|```/g, '').trim();
+  // Find JSON object in the response
+  const match = clean.match(/\{[\s\S]*\}/);
+  if (!match) return { found: false, notes: 'Could not parse response' };
+  try {
+    return JSON.parse(match[0]);
+  } catch(e) {
+    return { found: false, notes: 'Parse error: ' + e.message };
+  }
+}
+
+function renderGrid(drug) {
+  const area = document.getElementById('resultArea');
+  area.innerHTML =
+    '<div class="results-header">'
+    + '<h2>List prices for <em>' + escHtml(drug) + '</em></h2>'
+    + '<button class="export-btn" id="exportBtn" onclick="exportCSV()" disabled>Export CSV</button>'
+    + '</div>'
+    + '<div class="country-grid" id="countryGrid">'
+    + COUNTRIES.map(c => cardHtml(c, { status: 'loading' })).join('')
+    + '</div>';
+}
+
+function updateCard(country) {
+  const r = results[country.name] || { status: 'loading' };
+  const el = document.getElementById('card_' + slugify(country.name));
+  if (el) el.outerHTML = cardHtml(country, r);
+}
+
+function cardHtml(country, r) {
+  const id = 'card_' + slugify(country.name);
+  let dotClass = r.status === 'loading' ? 'loading' : r.status === 'found' ? 'found' : r.status === 'error' ? 'error' : 'notfound';
+
+  let priceHtml = '';
+  if (r.status === 'loading') {
+    priceHtml = '<div class="not-found-msg">Searching&hellip;</div>';
+  } else if (r.status === 'found' && r.found) {
+    const localFmt = r.list_price_local != null
+      ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.list_price_local)
+      : '—';
+    const usdFmt = r.list_price_usd != null
+      ? '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.list_price_usd)
+      : '';
+    priceHtml = '<div class="price-block">'
+      + '<div class="price-value">' + (r.currency || '') + ' ' + localFmt + '</div>'
+      + (usdFmt ? '<div class="price-usd">&asymp; ' + usdFmt + ' USD</div>' : '')
+      + (r.formulation ? '<div class="price-detail">' + escHtml(r.formulation) + (r.pack_size ? ' &middot; ' + escHtml(r.pack_size) : '') + '</div>' : '')
+      + (r.price_per_unit ? '<div class="price-detail">' + escHtml(r.price_per_unit) + '</div>' : '')
+      + (r.notes ? '<div class="price-detail">' + escHtml(r.notes) + '</div>' : '')
+      + (r.source_url
+          ? '<div class="price-source"><a href="' + escHtml(r.source_url) + '" target="_blank" rel="noopener">' + escHtml(r.source || 'Source') + ' &#8599;</a></div>'
+          : r.source ? '<div class="price-source">' + escHtml(r.source) + '</div>' : '')
+      + '</div>';
+  } else if (r.status === 'error') {
+    priceHtml = '<div class="not-found-msg">Error: ' + escHtml(r.error || 'unknown') + '</div>';
+  } else {
+    priceHtml = '<div class="not-found-msg">' + escHtml(r.notes || 'Not found') + '</div>';
+  }
+
+  return '<div class="country-card" id="' + id + '">'
+    + '<div class="country-top">'
+    + '<span class="flag">' + country.flag + '</span>'
+    + '<span class="country-name">' + country.name + '</span>'
+    + '<span class="status-dot ' + dotClass + '" title="' + dotClass + '"></span>'
+    + '</div>'
+    + priceHtml
+    + '</div>';
+}
+
+function refreshExportBtn() {
+  const btn = document.getElementById('exportBtn');
+  if (btn) btn.disabled = completed < COUNTRIES.length;
+}
+
+function exportCSV() {
+  const drug = currentDrug;
+  const rows = [['Country', 'Currency', 'List Price (Local)', 'List Price (USD)', 'Drug Name', 'Formulation', 'Pack Size', 'Price Per Unit', 'Source', 'Source URL', 'Notes']];
+  COUNTRIES.forEach(c => {
+    const r = results[c.name] || {};
+    if (r.found) {
+      rows.push([
+        c.name, r.currency || '', r.list_price_local || '', r.list_price_usd || '',
+        r.drug_name || '', r.formulation || '', r.pack_size || '',
+        r.price_per_unit || '', r.source || '', r.source_url || '', r.notes || ''
+      ]);
+    } else {
+      rows.push([c.name, '', '', '', '', '', '', '', '', '', r.notes || 'Not found']);
+    }
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = drug.replace(/\s+/g, '_') + '_international_prices.csv';
+  a.click();
+}
+
+function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9]/g, '_'); }
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
